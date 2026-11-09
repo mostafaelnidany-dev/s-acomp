@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>منظومة إدارة الطلبات والفروع الإقليمية السحابية</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <style> body { font-family: 'Cairo', sans-serif; } </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex h-screen overflow-hidden">
+
+    <aside class="w-64 bg-slate-900 text-white flex flex-col hidden md:flex z-20">
+        <div class="p-5 text-xl font-bold border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="fa-solid fa-network-wired text-blue-400"></i>
+                <span>منظومة الشركة</span>
+            </div>
+        </div>
+        
+        <div class="p-3 bg-slate-800 m-3 rounded-lg text-xs flex justify-between items-center border border-slate-700">
+            <span class="text-slate-400">حسابك الحالي:</span>
+            <span id="currentRoleBadge" class="font-bold text-amber-300">غير مسجل الدخول</span>
+        </div>
+
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="switchTab('new-ticket')" id="btn-new-ticket" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600 text-white font-semibold transition shadow-md">
+                <i class="fa-solid fa-plus-circle"></i> تقديم طلب جديد
+            </button>
+            <button onclick="switchTab('tickets')" id="btn-tickets" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition">
+                <i class="fa-solid fa-list-check"></i> متابعة الطلبات
+            </button>
+            <button onclick="switchTab('dashboard')" id="btn-dashboard" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition">
+                <i class="fa-solid fa-chart-pie"></i> لوحة الإحصائيات
+            </button>
+            <button onclick="switchTab('settings')" id="btn-settings" class="w-full flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-slate-800 transition">
+                <i class="fa-solid fa-gear"></i> إعدادات الهيكل السحابي
+            </button>
+        </nav>
+
+        <div class="p-4 border-t border-slate-800 space-y-2">
+            <button id="authBtn" onclick="openLoginModal()" class="w-full bg-blue-600 hover:bg-blue-700 text-sm py-2.5 rounded-lg text-center font-bold transition shadow">
+                <i class="fa-solid fa-right-to-bracket ml-1"></i> تسجيل الدخول / حساب جديد
+            </button>
+            <button onclick="exportToExcel()" class="w-full bg-emerald-700 hover:bg-emerald-600 text-sm py-2.5 rounded-lg text-center font-bold text-white transition shadow">
+                <i class="fa-solid fa-file-excel ml-1"></i> تصدير تقرير (Excel)
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col overflow-y-auto">
+        <header class="bg-slate-900 text-white p-4 flex justify-between items-center md:hidden sticky top-0 z-10">
+            <span class="font-bold flex items-center gap-2"><i class="fa-solid fa-network-wired text-blue-400"></i> منظومة الطلبات</span>
+            <div class="flex items-center gap-2">
+                <button onclick="openLoginModal()" class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-bold"><i class="fa-solid fa-user"></i> دخول</button>
+                <button onclick="exportToExcel()" class="text-xs bg-emerald-600 text-white px-2.5 py-1.5 rounded"><i class="fa-solid fa-file-excel"></i></button>
+            </div>
+        </header>
+
+        <div class="flex md:hidden bg-slate-800 text-white text-xs p-2 justify-around border-t border-slate-700">
+            <button onclick="switchTab('new-ticket')" class="p-2"><i class="fa-solid fa-plus-circle text-base block mb-1"></i>جديد</button>
+            <button onclick="switchTab('tickets')" class="p-2"><i class="fa-solid fa-list-check text-base block mb-1"></i>الطلبات</button>
+            <button onclick="switchTab('dashboard')" class="p-2"><i class="fa-solid fa-chart-pie text-base block mb-1"></i>إحصائيات</button>
+            <button onclick="switchTab('settings')" class="p-2"><i class="fa-solid fa-gear text-base block mb-1"></i>إعدادات</button>
+        </div>
+
+        <div class="p-4 md:p-8 max-w-7xl mx-auto w-full">
+            <section id="tab-new-ticket" class="tab-content space-y-6">
+                <div class="border-b pb-4">
+                    <h2 class="text-2xl font-bold text-slate-800">تقديم طلب / مشكلة جديدة</h2>
+                    <p class="text-sm text-slate-500">اختر جهتك المرسلة والجهة المستهدفة بدقة لتوجيه الطلب.</p>
+                </div>
+                <form id="ticketForm" class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5">اسم الموظف مقدم الطلب</label>
+                            <input type="text" id="employeeName" required readonly class="w-full p-3 border rounded-xl bg-slate-100 text-slate-600 outline-none font-semibold" placeholder="سجل دخولك أولاً...">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5">الجهة المرسلة (فرعك / إدارتك)</label>
+                            <select id="fromTarget" required class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50"></select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5 text-blue-700">الجهة الموجه إليها الطلب (المستهدفة)</label>
+                            <select id="toTarget" required class="w-full p-3 border-2 border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-blue-50/50 font-semibold"></select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5">تصنيف الموضوع</label>
+                            <input type="text" id="issueCategory" required class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="مثال: عطل شبكة، طلب صيانة، بضاعة...">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5">درجة الأولوية</label>
+                            <select id="priority" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none">
+                                <option value="عادية">عادية</option>
+                                <option value="متوسطة">متوسطة</option>
+                                <option value="عالية">عالية</option>
+                                <option value="حرجة جداً">حرجة جداً</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-bold mb-1.5">إرفاق صورة / مستند (اختياري)</label>
+                            <input type="file" id="ticketAttachment" accept="image/*" class="w-full p-2 border rounded-xl text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold mb-1.5">تفاصيل الطلب أو شرح المشكلة</label>
+                        <textarea id="issueDesc" rows="4" required class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="اكتب التفاصيل الكاملة هنا..."></textarea>
+                    </div>
+
+                    <button type="submit" id="submitBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold shadow-md transition flex justify-center items-center gap-2">
+                        <span>إرسال الطلب فوراً</span>
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </form>
+            </section>
+
+            <section id="tab-tickets" class="tab-content hidden space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b pb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">سجل الطلبات المصرحة لك</h2>
+                        <p id="scopeDescription" class="text-sm text-slate-500">يتم عرض الطلبات بحسب صلاحيات حسابك الحالي.</p>
+                    </div>
+                    <div class="w-full md:w-auto">
+                        <input type="text" id="searchInput" oninput="renderTickets()" placeholder="بحث بالرقم، الاسم، أو الجهة..." class="p-2.5 border rounded-xl text-sm w-full md:w-72 shadow-sm">
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-right border-collapse min-w-[750px]">
+                            <thead>
+                                <tr class="bg-slate-50 border-b text-slate-600 text-xs font-bold uppercase">
+                                    <th class="p-3.5">رقم الطلب</th>
+                                    <th class="p-3.5">التاريخ</th>
+                                    <th class="p-3.5">المرسل (من)</th>
+                                    <th class="p-3.5">المستهدف (إلى)</th>
+                                    <th class="p-3.5">الموضوع</th>
+                                    <th class="p-3.5">المرفق</th>
+                                    <th class="p-3.5">الأولوية</th>
+                                    <th class="p-3.5">الحالة</th>
+                                    <th class="p-3.5">التحكم وإغلاق التاسك</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ticketsTableBody" class="divide-y text-sm">
+                                <tr><td colspan="9" class="text-center p-6 text-slate-400">يرجى تسجيل الدخول لعرض الطلبات.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-dashboard" class="tab-content hidden space-y-6">
+                <h2 class="text-2xl font-bold text-slate-800 border-b pb-4">لوحة القيادة الإحصائية</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border-r-4 border-blue-500">
+                        <p class="text-xs text-slate-500 font-bold">إجمالي الطلبات المصرحة</p>
+                        <h3 id="stat-total" class="text-3xl font-bold mt-2 text-blue-600">0</h3>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border-r-4 border-amber-500">
+                        <p class="text-xs text-slate-500 font-bold">طلبات جديدة</p>
+                        <h3 id="stat-pending" class="text-3xl font-bold mt-2 text-amber-600">0</h3>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border-r-4 border-indigo-500">
+                        <p class="text-xs text-slate-500 font-bold">قيد المعالجة</p>
+                        <h3 id="stat-progress" class="text-3xl font-bold mt-2 text-indigo-600">0</h3>
+                    </div>
+                    <div class="bg-white p-5 rounded-2xl shadow-sm border-r-4 border-emerald-500">
+                        <p class="text-xs text-slate-500 font-bold">مغلقة ومكتملة</p>
+                        <h3 id="stat-closed" class="text-3xl font-bold mt-2 text-emerald-600">0</h3>
+                    </div>
+                </div>
+            </section>
+
+            <section id="tab-settings" class="tab-content hidden space-y-6">
+                <h2 class="text-2xl font-bold text-slate-800 border-b pb-4">إعدادات الهيكل السحابي وصيانة النظام</h2>
+                <div id="settingsContent" class="space-y-6 max-w-3xl"></div>
+            </section>
+
+        </div>
+    </main>
+
+    <div id="imageModal" class="fixed inset-0 bg-black/80 flex justify-center items-center z-50 hidden p-4" onclick="closeImageModal()">
+        <img id="modalImg" src="" class="max-w-full max-h-[90vh] rounded-lg shadow-2xl">
+    </div>
+
+    <script>
+        const firebaseConfig = {
+            databaseURL: "https://company-tickets-default-rtdb.firebaseio.com"
+        };
+        if (!firebase.apps.length) { firebase.initializeApp(firebaseConfig); }
+        const db = firebase.database();
+
+        const SUPER_ADMIN_PASS = "superadmin2026";
+        const GENERAL_BRANCH_MANAGER_PASS = "general_branches2026"; 
+
+        // بيانات أساسية تُستخدم فقط أول مرة على الإطلاق إذا كانت القاعدة فارغة تماماً
+        let initialRegions = {
+            "المنطقة الأولى": ["فرع المعادي", "فرع مدينة نصر"],
+            "المنطقة الثانية": ["فرع الإسكندرية", "فرع طنطا"]
+        };
+        let initialRegionPasswords = {
+            "المنطقة الأولى": "reg111",
+            "المنطقة الثانية": "reg222"
+        };
+        let initialDepartments = ["الموارد البشرية (HR)", "الحسابات والمالية", "الدعم الفني (IT)", "التسويق والمبيعات"];
+        let initialEntityPasswords = {
+            "الموارد البشرية (HR)": "hr123",
+            "الحسابات والمالية": "acc123",
+            "الدعم الفني (IT)": "it123",
+            "التسويق والمبيعات": "sales123"
+        };
+
+        let regions = {};
+        let regionPasswords = {};
+        let departments = [];
+        let entityPasswords = {};
+        let registeredUsers = {};
+
+        let currentSession = {
+            type: null, 
+            name: null,
+            target: null,
+            regionBranches: [] 
+        };
+
+        let tickets = [];
+
+        db.ref('tickets').on('value', (snapshot) => {
+            const data = snapshot.val();
+            tickets = [];
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    tickets.push({ firebaseKey: key, ...data[key] });
+                });
+            }
+            renderTickets();
+            updateDashboard();
+        });
+
+        // جلب الهيكل ببيانات السحابة فقط وعدم فرض القيم القديمة
+        db.ref('structure').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.regions) {
+                regions = data.regions || {};
+                regionPasswords = data.regionPasswords || {};
+                departments = data.departments || [];
+                entityPasswords = data.entityPasswords || {};
+                registeredUsers = data.users || { "أحمد محمد": "1234" };
+            } else {
+                // إذا كانت السحابة فارغة لأول مرة
+                regions = initialRegions;
+                regionPasswords = initialRegionPasswords;
+                departments = initialDepartments;
+                entityPasswords = initialEntityPasswords;
+                registeredUsers = { "أحمد محمد": "1234" };
+                syncStructureToCloud();
+            }
+            updateSelects();
+            if(!document.getElementById('tab-settings').classList.contains('hidden')) {
+                renderSettings();
+            }
+        });
+
+        function syncStructureToCloud() {
+            db.ref('structure').set({
+                regions: regions,
+                regionPasswords: regionPasswords,
+                departments: departments,
+                entityPasswords: entityPasswords,
+                users: registeredUsers
+            });
+        }
+
+        window.openLoginModal = function openLoginModal() {
+            if (currentSession.type) {
+                if (confirm("هل تريد تسجيل الخروج من حسابك الحالي؟")) {
+                    currentSession = { type: null, name: null, target: null, regionBranches: [] };
+                    document.getElementById('currentRoleBadge').innerText = "غير مسجل الدخول";
+                    document.getElementById('currentRoleBadge').className = "font-bold text-amber-300";
+                    document.getElementById('authBtn').innerHTML = `<i class="fa-solid fa-right-to-bracket ml-1"></i> تسجيل الدخول / حساب جديد`;
+                    document.getElementById('employeeName').value = "";
+                    alert("تم تسجيل الخروج بنجاح.");
+                    renderTickets();
+                }
+                return;
+            }
+
+            let action = prompt("اختر العملية:\n 1 - تسجيل دخول بموظف\n 2 - إنشاء حساب موظف جديد\n 3 - تسجيل دخول مدير منطقة\n 4 - تسجيل دخول مدير الفروع العام\n 5 - تسجيل دخول مسؤول (إدارة / فرع)\n 6 - تسجيل دخول المسؤول الرئيسي (Super Admin)");
+
+            if (action === "1") {
+                let name = prompt("أدخل اسمك المسجل:");
+                if (name && registeredUsers[name]) {
+                    let pass = prompt("أدخل كلمة المرور الخاصة بك:");
+                    if (pass === registeredUsers[name]) {
+                        currentSession = { type: 'EMPLOYEE', name: name, target: departments[0] || "", regionBranches: [] };
+                        updateSessionUI(name, "مستخدم (موظف)");
+                    } else { alert("كلمة المرور خطأ!"); }
+                } else { alert("المستخدم غير مسجل!"); }
+            } else if (action === "2") {
+                let name = prompt("أدخل اسمك الثلاثي لإنشاء حساب:");
+                if (name) {
+                    if (registeredUsers[name]) { alert("هذا الاسم مسجل مسبقاً، سجل دخولك مباشرة."); return; }
+                    let pass = prompt("أنشئ كلمة مرور خاصة بك:");
+                    if (pass) {
+                        registeredUsers[name] = pass;
+                        syncStructureToCloud();
+                        currentSession = { type: 'EMPLOYEE', name: name, target: departments[0] || "", regionBranches: [] };
+                        updateSessionUI(name, "مستخدم (موظف جديد)");
+                    }
+                }
+            } else if (action === "3") {
+                let regNames = Object.keys(regions);
+                if(regNames.length === 0) { alert("لا توجد مناطق معرفة حالياً!"); return; }
+                let regName = prompt("اختر المنطقة الإدارية:\n\n" + regNames.join("\n"));
+                if (regName && regions[regName]) {
+                    let pass = prompt(`أدخل كلمة مرور مدير (${regName}):`);
+                    let correctPass = regionPasswords[regName] || "reg123";
+                    if (pass === correctPass) {
+                        currentSession = { 
+                            type: 'REGIONAL_MANAGER', 
+                            name: "مدير " + regName, 
+                            target: regName, 
+                            regionBranches: regions[regName] || []
+                        };
+                        updateSessionUI("مدير " + regName, `مدير منطقة (${regName})`);
+                    } else { alert("كلمة المرور غير صحيحة!"); }
+                }
+            } else if (action === "4") {
+                let pass = prompt("أدخل كلمة مرور مدير الفروع العام:");
+                if (pass === GENERAL_BRANCH_MANAGER_PASS) {
+                    let allBranches = [];
+                    Object.values(regions).forEach(branchList => { if(branchList) allBranches.push(...branchList); });
+                    currentSession = { 
+                        type: 'GENERAL_BRANCH_MANAGER', 
+                        name: "مدير الفروع العام", 
+                        target: "كافة الفروع والمناطق", 
+                        regionBranches: allBranches 
+                    };
+                    updateSessionUI("مدير الفروع العام", "مدير الفروع (شامل)");
+                } else { alert("كلمة المرور خطأ!"); }
+            } else if (action === "5") {
+                let allEntities = [...departments];
+                Object.values(regions).forEach(bList => { if(bList) allEntities.push(...bList); });
+                
+                let entityName = prompt("اختر الإدارة أو الفرع:\n\n" + allEntities.join("\n"));
+                if (entityName && allEntities.includes(entityName)) {
+                    let pass = prompt(`أدخل كلمة المرور الخاصة بـ (${entityName}):`);
+                    let correctPass = entityPasswords[entityName] || "1234";
+                    if (pass === correctPass) {
+                        currentSession = { type: 'ENTITY_ADMIN', name: "مدير " + entityName, target: entityName, regionBranches: [] };
+                        updateSessionUI("مدير " + entityName, `مدير (${entityName})`);
+                    } else { alert("كلمة المرور غير صحيحة!"); }
+                }
+            } else if (action === "6") {
+                let pass = prompt("أدخل كلمة مرور المسؤول الرئيسي (Super Admin):");
+                if (pass === SUPER_ADMIN_PASS) {
+                    let allBranches = [];
+                    Object.values(regions).forEach(branchList => { if(branchList) allBranches.push(...branchList); });
+                    currentSession = { type: 'SUPER_ADMIN', name: "Super Admin", target: "المنظومة كاملة", regionBranches: allBranches };
+                    updateSessionUI("المسؤول الرئيسي", "Super Admin");
+                } else { alert("كلمة المرور خطأ!"); }
+            }
+        };
+
+        function updateSessionUI(displayName, roleText) {
+            document.getElementById('currentRoleBadge').innerText = roleText;
+            document.getElementById('currentRoleBadge').className = "font-bold text-emerald-300";
+            document.getElementById('authBtn').innerHTML = `<i class="fa-solid fa-right-from-bracket ml-1"></i> تسجيل الخروج`;
+            document.getElementById('employeeName').value = displayName;
+            alert(`مرحباً بك يا ${displayName}! تم تسجيل دخولك بنجاح.`);
+            renderTickets();
+            updateDashboard();
+        }
+
+        window.resetCloudStructure = function resetCloudStructure() {
+            if (confirm("تحذير: هل تريد مسح وإعادة ضبط هيكل السحابة بالكامل للوضع الافتراضي؟")) {
+                db.ref('structure').set({
+                    regions: initialRegions,
+                    regionPasswords: initialRegionPasswords,
+                    departments: initialDepartments,
+                    entityPasswords: initialEntityPasswords,
+                    users: { "أحمد محمد": "1234" }
+                }, () => {
+                    alert("تمت إعادة ضبط السحابة بنجاح.");
+                    location.reload();
+                });
+            }
+        };
+
+        function updateSelects() {
+            let branchesGroup = "";
+            Object.keys(regions).forEach(reg => {
+                branchesGroup += `<optgroup label="فروع ${reg}">`;
+                if(regions[reg]) {
+                    regions[reg].forEach(branch => {
+                        branchesGroup += `<option value="${branch}">${branch}</option>`;
+                    });
+                }
+                branchesGroup += `</optgroup>`;
+            });
+
+            let optionsHtml = `<optgroup label="الإدارات والقطاعات">` + departments.map(d => `<option value="${d}">${d}</option>`).join('') + `</optgroup>` + branchesGroup;
+            const fromSelect = document.getElementById('fromTarget');
+            const toSelect = document.getElementById('toTarget');
+            if(fromSelect) fromSelect.innerHTML = optionsHtml;
+            if(toSelect) toSelect.innerHTML = optionsHtml;
+        }
+
+        function getPermittedTickets() {
+            if (!currentSession.type) return [];
+            if (currentSession.type === 'SUPER_ADMIN') return tickets;
+            if (currentSession.type === 'GENERAL_BRANCH_MANAGER') {
+                return tickets.filter(t => currentSession.regionBranches.includes(t.fromTarget) || currentSession.regionBranches.includes(t.toTarget));
+            }
+            if (currentSession.type === 'REGIONAL_MANAGER') {
+                return tickets.filter(t => currentSession.regionBranches.includes(t.fromTarget) || currentSession.regionBranches.includes(t.toTarget));
+            }
+            if (currentSession.type === 'ENTITY_ADMIN' || currentSession.type === 'DEPT_ADMIN') {
+                return tickets.filter(t => t.toTarget === currentSession.target || t.fromTarget === currentSession.target);
+            }
+            return tickets.filter(t => t.name === currentSession.name);
+        }
+
+        function renderTickets() {
+            const tbody = document.getElementById('ticketsTableBody');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const scopeDesc = document.getElementById('scopeDescription');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            if (!currentSession.type) {
+                scopeDesc.innerText = "يرجى تسجيل الدخول أولاً لعرض الطلبات.";
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-amber-600 font-bold"><i class="fa-solid fa-lock"></i> يرجى تسجيل الدخول لعرض الطلبات.</td></tr>`;
+                return;
+            }
+
+            let permitted = getPermittedTickets();
+            scopeDesc.innerText = `حسابك: ${currentSession.name} (${currentSession.type})`;
+
+            const filtered = permitted.filter(t => 
+                (t.name && t.name.toLowerCase().includes(search)) || 
+                (t.id && t.id.toLowerCase().includes(search)) ||
+                (t.fromTarget && t.fromTarget.toLowerCase().includes(search)) ||
+                (t.toTarget && t.toTarget.toLowerCase().includes(search))
+            );
+
+            if(filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center p-6 text-slate-400">لا توجد طلبات مسجلة ضمن صلاحيتك الحالية.</td></tr>`;
+                return;
+            }
+
+            filtered.forEach((t) => {
+                let badgeColor = t.status === 'جديد' ? 'bg-amber-100 text-amber-700' : t.status === 'قيد المعالجة' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700';
+
+                let canEdit = (currentSession.type === 'SUPER_ADMIN') || 
+                              (currentSession.type === 'GENERAL_BRANCH_MANAGER' && (currentSession.regionBranches.includes(t.fromTarget) || currentSession.regionBranches.includes(t.toTarget))) ||
+                              (currentSession.type === 'REGIONAL_MANAGER' && (currentSession.regionBranches.includes(t.fromTarget) || currentSession.regionBranches.includes(t.toTarget))) ||
+                              ((currentSession.type === 'ENTITY_ADMIN' || currentSession.type === 'DEPT_ADMIN') && currentSession.target === t.toTarget);
+
+                let actionCell = canEdit ? `
+                    <select onchange="updateStatus('${t.firebaseKey}', this.value)" class="text-xs border-2 border-blue-500 p-1 rounded-lg bg-white font-bold">
+                        <option value="جديد" ${t.status==='جديد'?'selected':''}>جديد</option>
+                        <option value="قيد المعالجة" ${t.status==='قيد المعالجة'?'selected':''}>قيد المعالجة</option>
+                        <option value="مغلق ومكتمل" ${t.status==='مغلق ومكتمل'?'selected':''}>إغلاق واستكمال التاسك</option>
+                    </select>
+                ` : `<span class="text-xs text-slate-400 font-semibold">متابعة فقط</span>`;
+
+                let imgBtn = t.attachment ? `<button onclick="viewImage('${t.attachment}')" class="text-blue-600 hover:text-blue-800"><i class="fa-solid fa-image text-lg"></i></button>` : `<span class="text-slate-300">-</span>`;
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+                        <td class="p-3.5 font-bold text-slate-800">${t.id}</td>
+                        <td class="p-3.5 text-slate-500 text-xs">${t.date}</td>
+                        <td class="p-3.5"><span class="font-semibold block">${t.name}</span><span class="text-xs text-blue-600">${t.fromTarget}</span></td>
+                        <td class="p-3.5 font-bold text-indigo-700">${t.toTarget}</td>
+                        <td class="p-3.5">${t.category}</td>
+                        <td class="p-3.5 text-center">${imgBtn}</td>
+                        <td class="p-3.5"><span class="px-2 py-1 rounded-md text-xs bg-slate-100 font-semibold">${t.priority}</span></td>
+                        <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs font-bold ${badgeColor}">${t.status}</span></td>
+                        <td class="p-3.5">${actionCell}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        document.getElementById('ticketForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            if (!currentSession.type) {
+                alert("يجب تسجيل الدخول أولاً لتتمكن من إرسال الطلبات!");
+                openLoginModal();
+                return;
+            }
+
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري الإرسال للسحابة...`;
+
+            const fileInput = document.getElementById('ticketAttachment');
+            let attachmentData = null;
+            if (fileInput.files.length > 0) {
+                attachmentData = await fileToBase64(fileInput.files[0]);
+            }
+
+            const newTicket = {
+                id: 'REQ-' + Math.floor(1000 + Math.random() * 9000),
+                date: new Date().toLocaleDateString('ar-EG'),
+                name: currentSession.name,
+                fromTarget: document.getElementById('fromTarget').value,
+                toTarget: document.getElementById('toTarget').value,
+                category: document.getElementById('issueCategory').value,
+                priority: document.getElementById('priority').value,
+                desc: document.getElementById('issueDesc').value,
+                attachment: attachmentData,
+                status: 'جديد'
+            };
+
+            db.ref('tickets').push(newTicket, (error) => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = `<span>إرسال الطلب فوراً</span> <i class="fa-solid fa-paper-plane"></i>`;
+                if (error) {
+                    alert("حدث خطأ في الإرسال، حاول مجدداً.");
+                } else {
+                    alert('تم إرسال الطلب بنجاح وتوجيهه إلى ' + newTicket.toTarget);
+                    this.reset();
+                    document.getElementById('employeeName').value = currentSession.name;
+                    switchTab('tickets');
+                }
+            });
+        });
+
+        window.updateStatus = function updateStatus(key, newStatus) {
+            db.ref('tickets/' + key).update({ status: newStatus });
+        };
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
+        }
+
+        window.viewImage = function viewImage(src) {
+            document.getElementById('modalImg').src = src;
+            document.getElementById('imageModal').classList.remove('hidden');
+        };
+
+        window.closeImageModal = function closeImageModal() {
+            document.getElementById('imageModal').classList.add('hidden');
+        };
+
+        function updateDashboard() {
+            let permitted = getPermittedTickets();
+            const totalEl = document.getElementById('stat-total');
+            const pendingEl = document.getElementById('stat-pending');
+            const progressEl = document.getElementById('stat-progress');
+            const closedEl = document.getElementById('stat-closed');
+
+            if(totalEl) totalEl.innerText = permitted.length;
+            if(pendingEl) pendingEl.innerText = permitted.filter(t => t.status === 'جديد').length;
+            if(progressEl) progressEl.innerText = permitted.filter(t => t.status === 'قيد المعالجة').length;
+            if(closedEl) closedEl.innerText = permitted.filter(t => t.status && t.status.includes('مغلق')).length;
+        }
+
+        window.switchTab = function switchTab(tabId) {
+            if (tabId === 'settings' && currentSession.type !== 'SUPER_ADMIN') {
+                alert("عفواً، شاشة إعدادات الهيكل مخصصة للمسؤول الرئيسي فقط.");
+                return;
+            }
+
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+
+            document.querySelectorAll('aside button').forEach(btn => btn.classList.remove('bg-blue-600', 'text-white'));
+            const activeBtn = document.getElementById('btn-' + tabId);
+            if(activeBtn) activeBtn.classList.add('bg-blue-600', 'text-white');
+
+            if(tabId === 'dashboard') updateDashboard();
+            if(tabId === 'tickets') renderTickets();
+            if(tabId === 'settings') renderSettings();
+        };
+
+        function renderSettings() {
+            const container = document.getElementById('settingsContent');
+            if(!container) return;
+            
+            let regionOptions = Object.keys(regions).map(r => `<option value="${r}">${r}</option>`).join('');
+
+            let allEntitiesList = [...departments];
+            Object.values(regions).forEach(bList => { if(bList) allEntitiesList.push(...bList); });
+
+            let entityPassHtml = allEntitiesList.map(ent => `
+                <div class="flex justify-between items-center py-2 border-b text-sm">
+                    <span class="font-semibold text-slate-700">${ent}</span>
+                    <div class="flex gap-2">
+                        <input type="text" id="pass_${ent}" value="${entityPasswords[ent] || '1234'}" placeholder="كلمة المرور..." class="p-1.5 border rounded-lg text-xs w-32 outline-none">
+                        <button onclick="updateEntityPass('${ent}')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-bold">حفظ الباسورد</button>
+                    </div>
+                </div>
+            `).join('');
+
+            let usersHtml = "";
+            Object.keys(registeredUsers).forEach(username => {
+                usersHtml += `
+                    <li class="flex justify-between items-center py-2 border-b text-sm">
+                        <div>
+                            <span class="font-bold text-slate-800">${username}</span>
+                            <span class="text-xs text-slate-500 mr-2">(كلمة المرور: ${registeredUsers[username]})</span>
+                        </div>
+                        <button onclick="deleteEmployee('${username}')" class="text-red-500 hover:text-red-700 text-xs"><i class="fa-solid fa-trash"></i> حذف</button>
+                    </li>
+                `;
+            });
+
+            let regionsHtml = "";
+            Object.keys(regions).forEach(reg => {
+                let branchesList = (regions[reg] || []).map((b, idx) => `
+                    <li class="flex justify-between items-center py-1 text-sm">
+                        <span>• ${b}</span>
+                        <button onclick="deleteBranch('${reg}', ${idx})" class="text-red-500 hover:text-red-700 text-xs"><i class="fa-solid fa-trash"></i> حذف</button>
+                    </li>
+                `).join('');
+
+                regionsHtml += `<div class="p-4 bg-white rounded-xl border shadow-sm space-y-3">
+                    <div class="flex justify-between items-center border-b pb-2">
+                        <span class="font-bold text-blue-800 text-base">${reg}</span>
+                        <button onclick="deleteRegion('${reg}')" class="text-red-600 hover:text-red-800 text-xs font-bold"><i class="fa-solid fa-trash-can"></i> حذف المنطقة بالكامل</button>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">كلمة مرور مدير المنطقة:</span>
+                        <div class="flex gap-1">
+                            <input type="text" id="regPass_${reg}" value="${regionPasswords[reg] || 'reg123'}" class="p-1 border rounded w-24 text-xs font-bold">
+                            <button onclick="updateRegionPass('${reg}')" class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">حفظ</button>
+                        </div>
+                    </div>
+                    <ul class="divide-y">${branchesList || '<li class="text-xs text-slate-400">لا توجد فروع مضافة لهذه المنطقة.</li>'}</ul>
+                </div>`;
+            });
+
+            let deptsHtml = departments.map((d, idx) => `
+                <li class="flex justify-between items-center py-2 text-sm font-semibold border-b">
+                    <span>${d}</span>
+                    <button onclick="deleteDept(${idx})" class="text-red-500 hover:text-red-700 text-xs"><i class="fa-solid fa-trash"></i> حذف</button>
+                </li>
+            `).join('');
+
+            container.innerHTML = `
+                <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200 flex justify-between items-center">
+                    <div>
+                        <h4 class="font-bold text-amber-800 text-sm">إعادة ضبط هيكل السحابة بالكامل</h4>
+                        <p class="text-xs text-amber-600">اضغط هنا لمسح أي بيانات قديمة وإعادة هيكلة السحابة من جديد.</p>
+                    </div>
+                    <button onclick="resetCloudStructure()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition">إعادة ضبط السحابة</button>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+                    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-map-location-dot text-blue-600 ml-2"></i> إضافة منطقة جغرافية جديدة</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="newRegionName" placeholder="اسم المنطقة الجديدة..." class="flex-1 p-3 border rounded-xl outline-none text-sm">
+                        <input type="text" id="newRegionPass" placeholder="كلمة مرور المدير..." class="w-48 p-3 border rounded-xl outline-none text-sm">
+                        <button onclick="addNewRegion()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-sm">إضافة منطقة</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+                    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-users-gear text-blue-600 ml-2"></i> إدارة حسابات الموظفين المعتمدين</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="newEmpName" placeholder="اسم الموظف الثلاثي..." class="flex-1 p-3 border rounded-xl outline-none text-sm">
+                        <input type="text" id="newEmpPass" placeholder="كلمة المرور..." class="w-48 p-3 border rounded-xl outline-none text-sm">
+                        <button onclick="addNewEmployee()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold text-sm">اعتماد موظف</button>
+                    </div>
+                    <ul class="max-h-40 overflow-y-auto mt-2 divide-y">${usersHtml}</ul>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+                    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-key text-amber-600 ml-2"></i> إدارة كلمات مرور الفروع والإدارات</h3>
+                    <div class="max-h-60 overflow-y-auto space-y-2 pr-1">${entityPassHtml}</div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+                    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-code-branch text-indigo-600 ml-2"></i> إضافة فرع جديد إلى منطقة</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <select id="targetRegionSelect" class="p-3 border rounded-xl outline-none text-sm bg-slate-50">${regionOptions}</select>
+                        <input type="text" id="newBranchName" placeholder="اسم الفرع الجديد..." class="p-3 border rounded-xl outline-none text-sm">
+                        <button onclick="addNewBranch()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-xl font-bold text-sm">إضافة الفرع</button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border space-y-3">
+                    <h3 class="font-bold text-slate-800"><i class="fa-solid fa-sitemap text-emerald-600 ml-2"></i> إضافة إدارة أو قسم جديد</h3>
+                    <div class="flex gap-2">
+                        <input type="text" id="newDeptName" placeholder="اسم القسم أو الإدارة..." class="flex-1 p-3 border rounded-xl outline-none text-sm">
+                        <button onclick="addNewDept()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-3 rounded-xl font-bold text-sm">إضافة القسم</button>
+                    </div>
+                    <ul class="max-h-40 overflow-y-auto mt-2">${deptsHtml}</ul>
+                </div>
+
+                <div class="space-y-3 pt-2">
+                    <h3 class="font-bold text-lg text-slate-800">المناطق والفروع السحابية الحالية</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">${regionsHtml}</div>
+                </div>
+            `;
+        }
+
+        window.addNewRegion = function addNewRegion() {
+            let nameInput = document.getElementById('newRegionName');
+            let passInput = document.getElementById('newRegionPass');
+            
+            if (!nameInput) return;
+            let regName = nameInput.value.trim();
+            let regPass = passInput ? passInput.value.trim() : "";
+
+            if (!regName) { alert("يرجى إدخال اسم المنطقة."); return; }
+            if (regions[regName]) { alert("هذه المنطقة موجودة مسبقاً!"); return; }
+
+            regions[regName] = [];
+            regionPasswords[regName] = regPass || "reg123";
+
+            syncStructureToCloud();
+            alert(`تم إضافة المنطقة (${regName}) وحفظها سحابياً بنجاح.`);
+            renderSettings();
+        };
+
+        window.updateRegionPass = function updateRegionPass(regName) {
+            let passInput = document.getElementById(`regPass_${regName}`).value.trim();
+            if (!passInput) { alert("يرجى إدخال كلمة المرور."); return; }
+            regionPasswords[regName] = passInput;
+            syncStructureToCloud();
+            alert(`تم تحديث كلمة مرور مدير (${regName}) بنجاح.`);
+        };
+
+        window.addNewEmployee = function addNewEmployee() {
+            let name = document.getElementById('newEmpName').value.trim();
+            let pass = document.getElementById('newEmpPass').value.trim();
+
+            if (!name || !pass) { alert("يرجى إدخال اسم الموظف وكلمة المرور."); return; }
+            if (registeredUsers[name]) { alert("هذا الموظف مسجل مسبقاً!"); return; }
+
+            registeredUsers[name] = pass;
+            syncStructureToCloud();
+            alert(`تم اعتماد الموظف (${name}) بنجاح.`);
+            renderSettings();
+        };
+
+        window.deleteEmployee = function deleteEmployee(username) {
+            if (confirm(`هل أنت متأكد من حذف حساب الموظف (${username})؟`)) {
+                delete registeredUsers[username];
+                syncStructureToCloud();
+                renderSettings();
+            }
+        };
+
+        window.updateEntityPass = function updateEntityPass(entName) {
+            let passInput = document.getElementById(`pass_${entName}`).value.trim();
+            if (!passInput) { alert("يرجى إدخال كلمة المرور."); return; }
+            entityPasswords[entName] = passInput;
+            syncStructureToCloud();
+            alert(`تم تحديث كلمة المرور لـ (${entName}) وحفظها سحابياً بنجاح.`);
+        };
+
+        window.deleteRegion = function deleteRegion(regName) {
+            if (confirm(`هل أنت متأكد من حذف المنطقة (${regName}) بالكامل مع فروعها من السحابة؟`)) {
+                delete regions[regName];
+                delete regionPasswords[regName];
+                syncStructureToCloud();
+                renderSettings();
+            }
+        };
+
+        window.addNewBranch = function addNewBranch() {
+            let reg = document.getElementById('targetRegionSelect').value;
+            let branch = document.getElementById('newBranchName').value.trim();
+
+            if (!branch) { alert("يرجى إدخال اسم الفرع."); return; }
+            if (!regions[reg]) regions[reg] = [];
+            if (regions[reg].includes(branch)) { alert("هذا الفرع موجود بالفعل في هذه المنطقة!"); return; }
+
+            regions[reg].push(branch);
+            entityPasswords[branch] = "1234";
+            syncStructureToCloud();
+
+            alert(`تم إضافة الفرع (${branch}) إلى (${reg}) وحفظه سحابياً بنجاح.`);
+            renderSettings();
+        };
+
+        window.deleteBranch = function deleteBranch(reg, index) {
+            if (confirm(`هل أنت متأكد من حذف هذا الفرع؟`)) {
+                let branchName = regions[reg][index];
+                regions[reg].splice(index, 1);
+                delete entityPasswords[branchName];
+                syncStructureToCloud();
+                renderSettings();
+            }
+        };
+
+        window.addNewDept = function addNewDept() {
+            let dept = document.getElementById('newDeptName').value.trim();
+            if (!dept) { alert("يرجى إدخال اسم القسم."); return; }
+            if (departments.includes(dept)) { alert("هذا القسم موجود مسبقاً!"); return; }
+
+            departments.push(dept);
+            entityPasswords[dept] = "1234";
+            syncStructureToCloud();
+
+            alert(`تم إضافة القسم (${dept}) وحفظه سحابياً بنجاح.`);
+            renderSettings();
+        };
+
+        window.deleteDept = function deleteDept(index) {
+            if (confirm("هل أنت متأكد من حذف هذا القسم من السحابة؟")) {
+                let deptName = departments[index];
+                departments.splice(index, 1);
+                delete entityPasswords[deptName];
+                syncStructureToCloud();
+                renderSettings();
+            }
+        };
+
+        window.exportToExcel = function exportToExcel() {
+            let permitted = getPermittedTickets();
+            if (permitted.length === 0) {
+                alert("لا توجد طلبات لتصديرها.");
+                return;
+            }
+
+            let csvContent = "\uFEFF"; 
+            csvContent += "رقم الطلب,التاريخ,اسم الموظف,الجهة المرسلة,الجهة المستهدفة,التصنيف,الأولوية,الحالة,التفاصيل\n";
+
+            permitted.forEach(t => {
+                let row = `"${t.id}","${t.date}","${t.name}","${t.fromTarget}","${t.toTarget}","${t.category}","${t.priority}","${t.status}","${(t.desc||'').replace(/"/g, '""')}"`;
+                csvContent += row + "\n";
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `تقرير_الطلبات_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        };
+
+        updateSelects();
+    </script>
+</body>
+</html>
